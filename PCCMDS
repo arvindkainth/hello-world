@@ -1,0 +1,58 @@
+ with cte as
+( 
+ SELECT 
+ e.[encounterId] as EncounterId
+,e.[lifeTimeNumber] as Hospitalnumber
+,e.[firstName] + ' ' + e.[lastName] as Patientname
+,Convert(Date,e.[dateOfBirth]) as Dob
+,Left(e.[gender],1) as Gender
+,e.[age] as Age
+--,e.[patientType] as Patienttype
+,bs.SpellStartDate
+,bss.outTime as SpellEnddate
+,bss.bedLabel as BedLabel ---This is the lastBed occupied in the entire Spell
+,case when IsNumeric(Right(bss.bedLabel,2)) = 1 then Convert(INT,Right(bss.bedLabel,2)) else 0 end as SortId
+,dt.calendarDay
+,tm.label
+,convert(varchar,datepart(MM,bss.outTime)) + '-' + convert(varchar,datepart(yyyy,bss.outTime)) as monthYear
+,convert(char(3), bss.outTime, 0)  + '-' + convert(varchar,datepart(yyyy,bss.outTime)) as monthNameYear
+
+,pti.chartTime
+,case when coalesce(pti.valueString,pti.terseform) = 'Yes' then 'Y'  when coalesce(pti.valueString,pti.terseform) = 'No' then 'N' Else coalesce(pti.valueString,pti.terseform) end as value
+,ptInterventionId
+
+FROM [dbo].[D_Encounter] as e
+
+cross apply 
+(
+select  min(intime) as SpellStartdate,max(ptBedStayId) as maxptBedStayId from [dbo].[PtBedStay] as bs 
+where e.[encounterId] = bs.encounterId
+) as bs
+
+inner join [dbo].[PtBedStay] as bss on e.[encounterId] = bss.encounterId and bss.ptBedStayId = bs.maxptBedStayId 
+
+cross join [dbo].[V_InterventionList_PCCMDS] as tm
+
+Left outer join [dbo].[D_Day] as dt on convert(date,bs.SpellStartdate) < = convert(date,dt.calendarDay) and convert(date,dt.calendarDay) < = convert(date,bss.outTime)
+
+outer apply (
+select Top 1 pti.ptInterventionId,pti.encounterId,pti.chartTime,i.longLabel,valueString,terseForm from [CISReportingDB].[dbo].[PtIntervention] as pti
+Inner join [CISReportingDB].[dbo].[D_Intervention] as i on pti.interventionId = i.interventionId
+inner join [dbo].[V_InterventionList_PCCMDS] as t on t.label = i.longLabel
+where e.EncounterId = pti.encounterId and tm.label = i.longLabel and convert(date,dt.CalendarDay) = convert(date,pti.chartTime)
+order by pti.storeTime desc
+) as pti
+
+)
+
+Select * from cte
+--Excludes the test patients--
+where Hospitalnumber not like 'ZZ%' 
+and Patientname not like '%Test%'
+and (
+convert(Date,SpellEnddate) > '2018-11-30' 
+--OR SpellEnddate is Null  --uncomment here to see patients still in wards
+    )
+
+
+
