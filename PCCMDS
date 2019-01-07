@@ -46,13 +46,9 @@ order by pti.storeTime desc
 )
 
 Select * from cte
---Excludes the test patients--
 where Hospitalnumber not like 'ZZ%' 
 and Patientname not like '%Test%'
-and (
-convert(Date,SpellEnddate) > '2018-11-30' 
---OR SpellEnddate is Null  --uncomment here to see patients still in wards
-    )
+and convert(Date,SpellEnddate) > '2018-10-30'
 
 
 
